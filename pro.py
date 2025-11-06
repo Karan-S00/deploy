@@ -1,55 +1,127 @@
-import tkinter as tk
-from tkinter import messagebox
+import streamlit as st
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+import tempfile
+import datetime
 
-class SupermarketBilling:
-    def __init__(self, root):
-        root.title("Supermarket Billing System")
-        root.geometry("500x550")
+# ----------------- Modern Page Styling -----------------
+st.set_page_config(page_title="Supermarket Billing", page_icon="🛒", layout="centered")
 
-        self.products = {
-            "Apple": 30, "Banana": 10, "Milk": 50, "Bread": 40,
-            "Eggs": 5, "Cheese": 100, "Paneer": 200,
-            "Chicken 1kg": 250, "Beef 1kg": 300
+st.markdown("""
+    <style>
+        .main {
+            background-color: #f7f9fc;
         }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.08);
+            margin-bottom: 18px;
+        }
+        .title {
+            font-size: 32px !important;
+            color: #2C3E50;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-        tk.Label(root, text="Product", font=('Arial', 14, 'bold')).grid(row=0, column=0, padx=10, pady=10)
-        tk.Label(root, text="Price", font=('Arial', 14, 'bold')).grid(row=0, column=1)
-        tk.Label(root, text="Qty", font=('Arial', 14, 'bold')).grid(row=0, column=2)
+# ----------------- Title -----------------
+st.markdown("<div class='title'>🛒 Supermarket Billing System</div>", unsafe_allow_html=True)
 
-        self.entries = {}
-        for i, (product, price) in enumerate(self.products.items(), start=1):
-            tk.Label(root, text=product, font=('Arial', 12)).grid(row=i, column=0, padx=10, pady=5)
-            tk.Label(root, text=f"₹{price}", font=('Arial', 12)).grid(row=i, column=1)
-            self.entries[product] = tk.Entry(root, width=10)
-            self.entries[product].grid(row=i, column=2)
+# Product list
+products = {
+    "Apple": 30, "Banana": 10, "Milk": 50, "Bread": 40,
+    "Eggs": 5, "Cheese": 100, "Paneer": 200,
+    "Chicken 1kg": 250, "Beef 1kg": 300
+}
 
-        self.total_label = tk.Label(root, text="Total: ₹0", font=('Arial', 14, 'bold'))
-        self.total_label.grid(row=len(self.products)+1, column=0, columnspan=3, pady=20)
+st.markdown("<div class='card'>", unsafe_allow_html=True)
+st.subheader("🧺 Enter Quantities")
+quantities = {}
+cols = st.columns(2)
 
-        tk.Button(root, text="Calculate Total", command=self.calculate_total).grid(row=len(self.products)+2, column=0)
-        tk.Button(root, text="Clear", command=self.clear_entries).grid(row=len(self.products)+2, column=1)
-        tk.Button(root, text="Exit", command=root.quit).grid(row=len(self.products)+2, column=2)
+for i, (product, price) in enumerate(products.items()):
+    with cols[i % 2]:
+        quantities[product] = st.number_input(
+            f"{product} (₹{price})",
+            min_value=0,
+            step=1
+        )
+st.markdown("</div>", unsafe_allow_html=True)
 
-    def calculate_total(self):
-        total, details = 0, ""
-        for p, e in self.entries.items():
-            qty = e.get()
-            if qty.isdigit() and int(qty) > 0:
-                cost = int(qty) * self.products[p]
-                total += cost
-                details += f"{p} x {qty} = ₹{cost}\n"
-            elif qty.strip():
-                return messagebox.showerror("Invalid input", f"Quantity for {p} must be a number")
+# GST Section
+st.markdown("<div class='card'>", unsafe_allow_html=True)
+gst_rate = st.slider("💰 Select GST %", 0, 28, 5)
+st.markdown("</div>", unsafe_allow_html=True)
 
-        self.total_label.config(text=f"Total: ₹{total}")
-        messagebox.showinfo("Bill Details", details + f"\nTotal: ₹{total}" if total else "No items selected")
+# Calculate Bill
+if st.button("Calculate Total ✅"):
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
 
-    def clear_entries(self):
-        for e in self.entries.values():
-            e.delete(0, tk.END)
-        self.total_label.config(text="Total: ₹0")
+    total = 0
+    bill_details = []
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    SupermarketBilling(root)
-    root.mainloop()
+    for product, qty in quantities.items():
+        if qty > 0:
+            cost = qty * products[product]
+            total += cost
+            bill_details.append((product, qty, cost))
+
+    if total == 0:
+        st.warning("No items selected!")
+    else:
+        gst_amount = (total * gst_rate) / 100
+        grand_total = total + gst_amount
+
+        st.subheader("🧾 Bill Summary")
+        for item, qty, cost in bill_details:
+            st.text(f"{item} × {qty} = ₹{cost}")
+
+        st.write(f"**Subtotal:** ₹{total}")
+        st.write(f"**GST ({gst_rate}%):** ₹{gst_amount:.2f}")
+        st.write(f"### ✅ Final Total: ₹{grand_total:.2f}")
+
+        # Generate PDF
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            file_path = tmp_file.name
+            c = canvas.Canvas(file_path, pagesize=A4)
+            y = 800
+
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(200, y, "Supermarket Bill")
+            y -= 40
+
+            c.setFont("Helvetica", 12)
+            now = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+            c.drawString(50, y, f"Date & Time: {now}")
+            y -= 30
+
+            for item, qty, cost in bill_details:
+                c.drawString(50, y, f"{item} × {qty} = ₹{cost}")
+                y -= 20
+
+            y -= 20
+            c.drawString(50, y, f"Subtotal: ₹{total}")
+            y -= 20
+            c.drawString(50, y, f"GST ({gst_rate}%): ₹{gst_amount:.2f}")
+            y -= 20
+            c.drawString(50, y, f"Grand Total: ₹{grand_total:.2f}")
+
+            c.save()
+
+        with open(file_path, "rb") as pdf_file:
+            st.download_button(
+                label="📄 Download Bill PDF",
+                data=pdf_file,
+                file_name="Supermarket_Bill.pdf",
+                mime="application/pdf"
+            )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# Clear Button
+if st.button("🔄 Reset"):
+    st.experimental_rerun()
